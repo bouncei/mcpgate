@@ -1,6 +1,6 @@
 module github.com/bouncei/mcpgate
 
-go 1.25.0
+go 1.23
 
 require (
 	github.com/spf13/cobra v1.10.2
