@@ -118,6 +118,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	_ = r.Body.Close()
 	if err != nil {
 		http.Error(w, "cannot read body", http.StatusBadRequest)
+		s.audit.Decision(audit.Event{Label: id.Label, Decision: "deny:read", Status: 400, Method: r.Method, Latency: time.Since(start)})
 		return
 	}
 	msg, err := jsonrpc.Parse(body)
