@@ -12,7 +12,7 @@ func Root() *cobra.Command {
 	}
 	root.AddCommand(newKeygenCmd())
 	root.AddCommand(newValidateCmd())
-	// TODO(task11): root.AddCommand(newServeCmd())
+	root.AddCommand(newServeCmd())
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version",
