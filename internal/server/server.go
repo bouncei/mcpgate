@@ -114,12 +114,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	// Non-POST (GET SSE listen / DELETE session terminate) carries no JSON-RPC
 	// request body to inspect — authenticate and proxy through.
 	if r.Method != http.MethodPost {
-		s.audit.Decision(audit.Event{Label: id.Label, Decision: "allow", Status: 200, Method: r.Method, Latency: time.Since(start)})
-		s.proxy.ServeHTTP(w, r)
+		s.proxyAndAudit(w, r, audit.Event{Label: id.Label, Method: r.Method, Decision: "allow"}, start)
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBytes))
 	_ = r.Body.Close()
 	if err != nil {
 		http.Error(w, "cannot read body", http.StatusBadRequest)
@@ -149,21 +148,65 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			s.audit.Decision(audit.Event{Label: id.Label, Method: "tools/call", Tool: tool, Decision: "deny:policy", Status: 200, Latency: time.Since(start)})
 			return
 		}
-		s.audit.Decision(audit.Event{Label: id.Label, Method: "tools/call", Tool: tool, Decision: "allow", Status: 200, Latency: time.Since(start)})
-		s.proxy.ServeHTTP(w, r)
+		s.proxyAndAudit(w, r, audit.Event{Label: id.Label, Method: "tools/call", Tool: tool, Decision: "allow"}, start)
 
 	case "tools/list":
 		// Force a single JSON response from upstream so we can filter it.
 		r.Header.Set("Accept", "application/json")
 		ctx := context.WithValue(r.Context(), filterKey{}, id.Allow)
-		s.audit.Decision(audit.Event{Label: id.Label, Method: "tools/list", Decision: "allow", Status: 200, Latency: time.Since(start)})
-		s.proxy.ServeHTTP(w, r.WithContext(ctx))
+		s.proxyAndAudit(w, r.WithContext(ctx), audit.Event{Label: id.Label, Method: "tools/list", Decision: "allow"}, start)
 
 	default:
 		// initialize, notifications, ping, etc. — proxy through unchanged.
-		s.audit.Decision(audit.Event{Label: id.Label, Method: msg.Method, Decision: "allow", Status: 200, Latency: time.Since(start)})
-		s.proxy.ServeHTTP(w, r)
+		s.proxyAndAudit(w, r, audit.Event{Label: id.Label, Method: msg.Method, Decision: "allow"}, start)
 	}
+}
+
+// maxRequestBytes bounds the JSON-RPC request body read from a client. MCP
+// control-plane messages are small; this guards against an authenticated but
+// hostile client sending an unbounded body.
+const maxRequestBytes = 16 << 20 // 16 MiB
+
+// statusWriter wraps an http.ResponseWriter to record the status code actually
+// written (by the proxy or its ErrorHandler), so the audit log reflects the
+// real outcome rather than a predicted 200. It preserves http.Flusher so the
+// reverse proxy can still stream SSE.
+type statusWriter struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (sw *statusWriter) WriteHeader(code int) {
+	if !sw.wroteHeader {
+		sw.status = code
+		sw.wroteHeader = true
+	}
+	sw.ResponseWriter.WriteHeader(code)
+}
+
+func (sw *statusWriter) Write(b []byte) (int, error) {
+	if !sw.wroteHeader {
+		sw.status = http.StatusOK
+		sw.wroteHeader = true
+	}
+	return sw.ResponseWriter.Write(b)
+}
+
+func (sw *statusWriter) Flush() {
+	if f, ok := sw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// proxyAndAudit forwards the request to the upstream and emits exactly one
+// audit event afterward, recording the real response status and total latency.
+func (s *Server) proxyAndAudit(w http.ResponseWriter, r *http.Request, ev audit.Event, start time.Time) {
+	sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+	s.proxy.ServeHTTP(sw, r)
+	ev.Status = sw.status
+	ev.Latency = time.Since(start)
+	s.audit.Decision(ev)
 }
 
 func bearer(r *http.Request) string {
