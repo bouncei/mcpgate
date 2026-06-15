@@ -1,0 +1,13 @@
+version: 2
+builds:
+  - main: ./cmd/mcpgate
+    binary: mcpgate
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - -s -w -X github.com/bouncei/mcpgate/internal/cli.version={{.Version}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+archives:
+  - formats: [tar.gz]
+checksum:
+  name_template: "checksums.txt"
