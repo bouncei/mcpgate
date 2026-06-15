@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -53,7 +54,11 @@ func New(cfg *config.Config) (*Server, error) {
 			return nil // not a tools/list request
 		}
 		if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
-			return nil
+			// We forced Accept: application/json upstream for tools/list. A
+			// non-JSON response (e.g. SSE) cannot be filtered, so fail closed:
+			// refuse it via the proxy ErrorHandler (502) rather than stream the
+			// unfiltered tool list and leak tools the caller may not use.
+			return fmt.Errorf("tools/list response is not filterable (content-type %q)", resp.Header.Get("Content-Type"))
 		}
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
