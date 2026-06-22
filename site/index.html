@@ -3,16 +3,30 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>mcpgate — a lock for your MCP server</title>
-<meta name="description" content="Drop-in auth gateway for self-hosted MCP servers. API-key auth, per-tool allowlists, rate limiting, and an audit log — without touching the upstream. Open source, Apache-2.0, written in Go." />
+<title>mcpgate — auth gateway for self-hosted MCP servers</title>
+<meta name="description" content="mcpgate adds authentication to a self-hosted MCP server: API-key auth, per-tool allowlists, rate limiting, and an audit log — a drop-in reverse proxy with zero upstream changes. Free, open-source, single Go binary." />
+<meta name="keywords" content="MCP server authentication, secure MCP server, MCP gateway, MCP auth, MCP security, MCP reverse proxy, Model Context Protocol authentication, MCP API key, MCP access control, self-hosted MCP" />
+<meta name="author" content="bouncei" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
 <meta name="theme-color" content="#0E0D0C" />
+<link rel="canonical" href="https://mcpgate.bouncei.dev/" />
 
-<meta property="og:title" content="mcpgate — a lock for your MCP server" />
-<meta property="og:description" content="Drop-in auth gateway for self-hosted MCP servers. Open source, written in Go." />
+<!-- Open Graph -->
+<meta property="og:title" content="mcpgate — auth gateway for self-hosted MCP servers" />
+<meta property="og:description" content="Add API-key auth, per-tool allowlists, rate limiting, and an audit log to any self-hosted MCP server — a drop-in proxy with zero upstream changes. Open source, written in Go." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://mcpgate.bouncei.dev/" />
-<link rel="canonical" href="https://mcpgate.bouncei.dev/" />
+<meta property="og:site_name" content="mcpgate" />
+<meta property="og:image" content="https://mcpgate.bouncei.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="mcpgate — a lock for your MCP server. Drop-in auth gateway: auth, allowlist, rate-limit, audit." />
+
+<!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="mcpgate — auth gateway for self-hosted MCP servers" />
+<meta name="twitter:description" content="Add auth, per-tool allowlists, rate limiting & an audit log to any self-hosted MCP server. Open source, single Go binary." />
+<meta name="twitter:image" content="https://mcpgate.bouncei.dev/og.png" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -81,6 +95,7 @@
   @media (min-width: 760px) { .wrap { padding: 0 40px; } }
 
   a { color: inherit; }
+  code { font-family: var(--f-mono); font-size: 0.86em; color: var(--amber); }
   ::selection { background: rgba(224,162,59,0.28); }
 
   /* ── top bar ── */
@@ -192,6 +207,14 @@
   .flow b { color: var(--amber); font-weight: 700; }
   .flow .u { color: var(--faint); }
 
+  /* faq */
+  .faq { margin-top: 14px; }
+  .faq .qa { padding: 24px 0; border-bottom: 1px solid var(--rule-2); }
+  .faq .qa:last-child { border-bottom: 0; }
+  .faq h3 { font-family: var(--f-mono); font-weight: 500; font-size: 16px; letter-spacing: .005em; margin: 0 0 8px; color: var(--fg); }
+  .faq p { margin: 0; color: var(--dim); font-size: 16.5px; max-width: 70ch; }
+  .faq code { font-family: var(--f-mono); font-size: 0.85em; color: var(--amber); }
+
   /* footer */
   footer { border-top: 1px solid var(--rule); padding: 40px 0 60px; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; justify-content: space-between; }
@@ -240,6 +263,70 @@
     [data-par] { transform: none !important; }
   }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "mcpgate",
+      "description": "A drop-in auth gateway (reverse proxy) for self-hosted MCP servers. Adds API-key authentication, per-tool allowlists, rate limiting, and an audit log without changing the upstream server.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux, macOS, Windows",
+      "url": "https://mcpgate.bouncei.dev/",
+      "downloadUrl": "https://github.com/bouncei/mcpgate/releases",
+      "image": "https://mcpgate.bouncei.dev/og.png",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@type": "Person", "name": "bouncei", "url": "https://github.com/bouncei" }
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "name": "mcpgate",
+      "codeRepository": "https://github.com/bouncei/mcpgate",
+      "programmingLanguage": "Go",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "about": "Authentication and authorization gateway for Model Context Protocol (MCP) servers"
+    },
+    {
+      "@type": "WebSite",
+      "name": "mcpgate",
+      "url": "https://mcpgate.bouncei.dev/"
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How do I add authentication to an MCP server?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Run mcpgate as a reverse proxy in front of your MCP server and point your client at the gateway. It checks an API key on every request and returns 401 to anyone without a valid key — no changes to the upstream server are needed." }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I secure a self-hosted MCP server?",
+          "acceptedAnswer": { "@type": "Answer", "text": "mcpgate adds four controls in front of a self-hosted MCP server: API-key authentication, a per-tool allowlist (deny by default), per-key rate limiting, and a structured audit log. It works with Streamable HTTP and SSE transports." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does mcpgate require changing my MCP server?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. mcpgate is a drop-in proxy that sits in front of your existing server. You don't modify the upstream MCP server's code — you just route clients through the gateway." }
+        },
+        {
+          "@type": "Question",
+          "name": "What MCP transports does mcpgate support?",
+          "acceptedAnswer": { "@type": "Answer", "text": "mcpgate supports the Streamable HTTP and SSE transports. Tool calls and SSE streams pass through untouched; tools/list responses are filtered to each key's allowlist." }
+        },
+        {
+          "@type": "Question",
+          "name": "Is mcpgate free and open source?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. mcpgate is free and open source under the Apache-2.0 license, distributed as a single Go binary and a container image." }
+        }
+      ]
+    }
+  ]
+}
+</script>
 <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
@@ -255,6 +342,7 @@
       </a>
       <nav class="nav">
         <a class="ghost" href="#how">How it works</a>
+        <a class="ghost" href="#faq">FAQ</a>
         <a href="#quickstart">Quickstart</a>
         <a href="https://github.com/bouncei/mcpgate">GitHub&#8201;&#8599;</a>
       </nav>
@@ -346,6 +434,20 @@ keys:
 
 <span class="cmt"># point your client at http://localhost:8080/mcp</span></pre>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="faq">
+      <div class="wrap">
+        <p class="kicker reveal">FAQ</p>
+        <h2 class="reveal s1">Questions, answered.</h2>
+        <div class="faq">
+          <div class="qa reveal s1"><h3>How do I add authentication to an MCP server?</h3><p>Run mcpgate as a reverse proxy in front of your MCP server and point your client at the gateway. It checks an API key on every request and returns <code>401</code> to anyone without a valid key — no changes to the upstream server are needed.</p></div>
+          <div class="qa reveal s2"><h3>How do I secure a self-hosted MCP server?</h3><p>mcpgate adds four controls in front of a self-hosted MCP server: API-key authentication, a per-tool allowlist (deny by default), per-key rate limiting, and a structured audit log. It works with Streamable HTTP and SSE transports.</p></div>
+          <div class="qa reveal s3"><h3>Does mcpgate require changing my MCP server?</h3><p>No. mcpgate is a drop-in proxy that sits in front of your existing server. You don&rsquo;t modify the upstream MCP server&rsquo;s code — you just route clients through the gateway.</p></div>
+          <div class="qa reveal s4"><h3>What MCP transports does mcpgate support?</h3><p>mcpgate supports the Streamable HTTP and SSE transports. Tool calls and SSE streams pass through untouched; <code>tools/list</code> responses are filtered to each key&rsquo;s allowlist.</p></div>
+          <div class="qa reveal s4"><h3>Is mcpgate free and open source?</h3><p>Yes. mcpgate is free and open source under the Apache-2.0 license, distributed as a single Go binary and a container image.</p></div>
         </div>
       </div>
     </section>
