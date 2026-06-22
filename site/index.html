@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>mcpgate — a lock for your MCP server</title>
+<meta name="description" content="Drop-in auth gateway for self-hosted MCP servers. API-key auth, per-tool allowlists, rate limiting, and an audit log — without touching the upstream. Open source, Apache-2.0, written in Go." />
+<meta name="theme-color" content="#0E0D0C" />
+
+<meta property="og:title" content="mcpgate — a lock for your MCP server" />
+<meta property="og:description" content="Drop-in auth gateway for self-hosted MCP servers. Open source, written in Go." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://mcpgate.bouncei.dev/" />
+<link rel="canonical" href="https://mcpgate.bouncei.dev/" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300..600&display=swap" rel="stylesheet" />
+
+<link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="18" fill="%230E0D0C"/><text x="50%25" y="60%25" font-family="JetBrains Mono, monospace" font-size="58" font-weight="700" text-anchor="middle" fill="%23E0A23B">&#8741;</text></svg>' />
+
+<style>
+  :root {
+    --bg:      #0E0D0C;
+    --bg-2:    #15130F;
+    --panel:   #131110;
+    --fg:      #E9DEC0;
+    --dim:     #9A9082;
+    --faint:   #6A645B;
+    --rule:    rgba(233,222,192,0.13);
+    --rule-2:  rgba(233,222,192,0.07);
+    --amber:   #E0A23B;
+    --green:   #84C9A1;
+    --red:     #E26B5C;
+
+    --f-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+    --f-body:    "Newsreader", Georgia, serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --max: 1080px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--f-body);
+    font-size: 18px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* dot-grid field + faint scanlines */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      radial-gradient(circle, rgba(233,222,192,0.05) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 85%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 85%);
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: .5;
+    background-image: repeating-linear-gradient(to bottom, rgba(255,255,255,0.010) 0 1px, transparent 1px 3px);
+  }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; position: relative; z-index: 2; }
+  @media (min-width: 760px) { .wrap { padding: 0 40px; } }
+
+  a { color: inherit; }
+  ::selection { background: rgba(224,162,59,0.28); }
+
+  /* ── top bar ── */
+  .top { border-bottom: 1px solid var(--rule); }
+  .top .wrap { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; gap: 20px; }
+  @media (min-width: 760px) { .top .wrap { padding: 16px 40px; } }
+  .brand { display: inline-flex; align-items: baseline; gap: 9px; text-decoration: none; font-family: var(--f-mono); }
+  .brand .mark { color: var(--amber); font-weight: 700; font-size: 17px; }
+  .brand .name { font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+  .brand .ver  { color: var(--faint); font-size: 11px; }
+  .nav { display: flex; align-items: center; gap: 22px; font-family: var(--f-mono); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; }
+  .nav a { color: var(--dim); text-decoration: none; transition: color .18s ease; }
+  .nav a:hover { color: var(--amber); }
+  .nav .ghost { display: none; }
+  @media (min-width: 620px) { .nav .ghost { display: inline; } }
+
+  /* ── hero ── */
+  .hero { padding: 78px 0 30px; }
+  @media (min-width: 760px) { .hero { padding: 116px 0 48px; } }
+
+  .eyebrow {
+    font-family: var(--f-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--faint); display: inline-flex; align-items: center; gap: 12px; margin-bottom: 30px;
+  }
+  .eyebrow .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .eyebrow .sep { color: var(--rule); }
+
+  h1 {
+    font-family: var(--f-display); font-weight: 400;
+    font-size: clamp(48px, 9vw, 104px); line-height: 0.98; letter-spacing: -0.012em;
+    margin: 0 0 28px; max-width: 16ch;
+  }
+  h1 em { font-style: italic; color: var(--amber); }
+
+  .lede { font-size: clamp(18px, 2.4vw, 22px); color: var(--dim); max-width: 56ch; margin: 0 0 14px; }
+  .lede strong { color: var(--fg); font-weight: 500; }
+
+  .threat {
+    font-family: var(--f-mono); font-size: 12.5px; color: var(--faint); letter-spacing: .01em;
+    max-width: 60ch; margin: 22px 0 40px; padding-left: 14px; border-left: 2px solid rgba(226,107,92,0.5);
+  }
+  .threat b { color: var(--red); font-weight: 500; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .btn {
+    font-family: var(--f-mono); font-size: 13px; letter-spacing: .02em; text-decoration: none;
+    padding: 12px 18px; border-radius: 7px; display: inline-flex; align-items: center; gap: 9px;
+    transition: transform .16s ease, background .16s ease, border-color .16s ease;
+  }
+  .btn.primary { background: var(--amber); color: #1a1408; font-weight: 700; }
+  .btn.primary:hover { transform: translateY(-2px); background: #ecb152; }
+  .btn.ghost { color: var(--fg); border: 1px solid var(--rule); }
+  .btn.ghost:hover { border-color: var(--amber); color: var(--amber); transform: translateY(-2px); }
+  .btn .arrow { transition: transform .16s ease; }
+  .btn:hover .arrow { transform: translate(2px,-2px); }
+
+  /* ── gate log: the memorable artifact ── */
+  .gate { margin: 64px 0 0; }
+  .panel {
+    background: linear-gradient(180deg, var(--panel), #100e0c);
+    border: 1px solid var(--rule); border-radius: 11px; overflow: hidden;
+    box-shadow: 0 30px 70px -40px rgba(0,0,0,.9);
+  }
+  .panel .bar {
+    display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-bottom: 1px solid var(--rule-2);
+    font-family: var(--f-mono); font-size: 11.5px; color: var(--faint); letter-spacing: .04em;
+  }
+  .panel .bar .dotrow { display: flex; gap: 6px; margin-right: 8px; }
+  .panel .bar .d { width: 10px; height: 10px; border-radius: 50%; background: #2a2620; }
+  .panel .bar .title { margin-left: auto; text-transform: uppercase; }
+  .log { font-family: var(--f-mono); font-size: 13.5px; line-height: 1.95; padding: 20px 18px; overflow-x: auto; }
+  @media (min-width: 760px) { .log { padding: 26px 26px; font-size: 14px; } }
+  .log .row { white-space: pre; }
+  .log .c-dim  { color: var(--faint); }
+  .log .c-fg   { color: var(--fg); }
+  .log .c-amb  { color: var(--amber); }
+  .log .c-grn  { color: var(--green); }
+  .log .c-red  { color: var(--red); }
+  .log .gap { display: block; height: 12px; }
+
+  /* ── section scaffolding ── */
+  section.block { padding: 80px 0; border-top: 1px solid var(--rule); }
+  .kicker { font-family: var(--f-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--amber); margin: 0 0 26px; }
+  h2 { font-family: var(--f-display); font-weight: 400; font-size: clamp(30px, 5vw, 46px); line-height: 1.04; letter-spacing: -.01em; margin: 0 0 10px; }
+
+  /* features */
+  .feat { display: grid; gap: 0; margin-top: 14px; }
+  .feat .item { display: grid; grid-template-columns: 28px 1fr; gap: 18px; padding: 26px 0; border-bottom: 1px solid var(--rule-2); }
+  .feat .item:last-child { border-bottom: 0; }
+  .feat .n { font-family: var(--f-mono); font-size: 12px; color: var(--faint); padding-top: 6px; }
+  .feat h3 { font-family: var(--f-mono); font-weight: 500; font-size: 16px; letter-spacing: .01em; margin: 0 0 6px; color: var(--fg); }
+  .feat p { margin: 0; color: var(--dim); font-size: 16.5px; max-width: 60ch; }
+  .feat h3 .tag { color: var(--amber); }
+
+  /* quickstart */
+  .steps { display: grid; gap: 18px; margin-top: 18px; }
+  .step { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start; }
+  .step .lbl { font-family: var(--f-mono); font-size: 12px; color: var(--faint); white-space: nowrap; padding-top: 14px; letter-spacing: .04em; }
+  pre {
+    margin: 0; font-family: var(--f-mono); font-size: 13px; line-height: 1.7; color: var(--fg);
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 9px; padding: 14px 16px; overflow-x: auto;
+  }
+  pre .cmt { color: var(--faint); }
+  pre .acc { color: var(--amber); }
+  pre .grn { color: var(--green); }
+
+  /* flow line */
+  .flow { font-family: var(--f-mono); font-size: clamp(12px, 2.3vw, 15px); color: var(--dim); margin-top: 18px; white-space: nowrap; overflow-x: auto; padding-bottom: 6px; }
+  .flow b { color: var(--amber); font-weight: 700; }
+  .flow .u { color: var(--faint); }
+
+  /* footer */
+  footer { border-top: 1px solid var(--rule); padding: 40px 0 60px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center; justify-content: space-between; }
+  footer .lt { font-family: var(--f-mono); font-size: 12px; color: var(--faint); letter-spacing: .03em; }
+  footer .lks { display: flex; gap: 22px; font-family: var(--f-mono); font-size: 12.5px; }
+  footer .lks a { color: var(--dim); text-decoration: none; transition: color .18s ease; }
+  footer .lks a:hover { color: var(--amber); }
+
+  /* staggered load reveal */
+  .rise { opacity: 0; transform: translateY(14px); animation: rise .8s cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.23s}.d4{animation-delay:.32s}.d5{animation-delay:.43s}.d6{animation-delay:.55s}
+  @media (prefers-reduced-motion: reduce) { .rise { animation: none; opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <span class="mark">&#8741;</span>
+        <span class="name">mcpgate</span>
+        <span class="ver">v0.1</span>
+      </a>
+      <nav class="nav">
+        <a class="ghost" href="#how">How it works</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="https://github.com/bouncei/mcpgate">GitHub&#8201;&#8599;</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div class="eyebrow rise d1"><span class="pip"></span> Open source &nbsp;<span class="sep">/</span>&nbsp; Apache-2.0 &nbsp;<span class="sep">/</span>&nbsp; Single Go binary</div>
+        <h1 class="rise d2">A lock for your <em>MCP server.</em></h1>
+        <p class="lede rise d3">mcpgate is a drop-in proxy that puts <strong>API-key auth, per-tool allowlists, rate limits, and an audit log</strong> in front of any self-hosted MCP server — without changing a line of the upstream.</p>
+        <p class="threat rise d3">Scans in 2026 found <b>12,520+ internet-exposed MCP servers</b> — answering tool calls that read files, query databases, and run commands, with <b>no authentication at all.</b> The protocol doesn&rsquo;t require any.</p>
+        <div class="cta rise d4">
+          <a class="btn primary" href="#quickstart">Protect a server <span class="arrow">&#8599;</span></a>
+          <a class="btn ghost" href="https://github.com/bouncei/mcpgate">Star on GitHub</a>
+        </div>
+
+        <div class="gate rise d5">
+          <div class="panel">
+            <div class="bar">
+              <span class="dotrow"><span class="d"></span><span class="d"></span><span class="d"></span></span>
+              client &#8594; mcpgate &#8594; mcp&nbsp;server
+              <span class="title">live decision log</span>
+            </div>
+            <div class="log">
+<div class="row"><span class="c-dim">$</span> <span class="c-fg">curl mcp.internal/mcp</span>  <span class="c-dim">-d '{"method":"tools/call","name":"run_command"}'</span></div>
+<div class="row"><span class="c-red">&#8592; 401</span> <span class="c-dim">unauthorized — no API key</span></div>
+<span class="gap"></span>
+<div class="row"><span class="c-dim">$</span> <span class="c-fg">curl -H "Authorization: Bearer •••" …name":"read_file"</span></div>
+<div class="row"><span class="c-dim">&#8594;</span> auth <span class="c-grn">&#10003;</span>   rate-limit <span class="c-grn">&#10003;</span>   policy <span class="c-amb">read_file</span> <span class="c-grn">&#10003;</span></div>
+<div class="row"><span class="c-grn">&#8592; 200</span> <span class="c-dim">proxied to upstream</span></div>
+<span class="gap"></span>
+<div class="row"><span class="c-dim">$</span> <span class="c-fg">curl -H "Authorization: Bearer •••" …name":"run_command"</span></div>
+<div class="row"><span class="c-dim">&#8594;</span> auth <span class="c-grn">&#10003;</span>   policy <span class="c-amb">run_command</span> <span class="c-red">&#10007; not in allowlist</span></div>
+<div class="row"><span class="c-red">&#8592; -32001</span> <span class="c-dim">tool not permitted — never reaches the server</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="features">
+      <div class="wrap">
+        <p class="kicker">What it enforces</p>
+        <h2>Four controls. Zero upstream changes.</h2>
+        <div class="feat">
+          <div class="item"><div class="n">01</div><div><h3>API-key <span class="tag">auth</span></h3><p>Keys are SHA-256&nbsp;hashed at rest. Every request needs one — unauthenticated calls get <code>401</code> before they ever touch your server.</p></div></div>
+          <div class="item"><div class="n">02</div><div><h3>Per-tool <span class="tag">allowlist</span></h3><p>Deny by default. Each key may call only the tools you name. Blocked tools are also hidden from <code>tools/list</code>, so clients never see them.</p></div></div>
+          <div class="item"><div class="n">03</div><div><h3>Rate <span class="tag">limiting</span></h3><p>Per-key token buckets. A noisy or runaway client gets <code>429</code>, not a melted upstream.</p></div></div>
+          <div class="item"><div class="n">04</div><div><h3>Audit <span class="tag">log</span></h3><p>One structured JSON line per request — who, which tool, the decision, status, and latency. Pipe it anywhere.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="how">
+      <div class="wrap">
+        <p class="kicker">How it works</p>
+        <h2>One instance in front of one server.</h2>
+        <p class="lede" style="margin-top:14px">Point your MCP client at mcpgate instead of the server. Every request runs the chain, then the allowed ones are proxied through — Streamable HTTP and SSE both stream untouched.</p>
+        <div class="flow">client&nbsp; &#8594; &nbsp;<b>mcpgate</b> <span class="u">[ recover &#183; auth &#183; rate-limit &#183; policy &#183; audit ]</span>&nbsp; &#8594; &nbsp;mcp&nbsp;server</div>
+      </div>
+    </section>
+
+    <section class="block" id="quickstart">
+      <div class="wrap">
+        <p class="kicker">Quickstart</p>
+        <h2>Locked down in 30 seconds.</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="lbl">01 · key</div>
+<pre><span class="cmt"># mint a key — prints it once, plus a config snippet</span>
+mcpgate keygen --label claude-desktop</pre>
+          </div>
+          <div class="step">
+            <div class="lbl">02 · config</div>
+<pre>upstream:
+  url: <span class="grn">"http://localhost:9000/mcp"</span>
+keys:
+  - label: <span class="grn">"claude-desktop"</span>
+    hash: <span class="grn">"&lt;paste from keygen&gt;"</span>
+    allow: [<span class="acc">"read_file"</span>, <span class="acc">"list_dir"</span>]</pre>
+          </div>
+          <div class="step">
+            <div class="lbl">03 · run</div>
+<pre>docker run -p 8080:8080 \
+  -v $PWD/config.yaml:/etc/mcpgate/config.yaml \
+  <span class="acc">ghcr.io/bouncei/mcpgate</span>
+
+<span class="cmt"># point your client at http://localhost:8080/mcp</span></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="lt">&#8741; mcpgate — built by <a href="https://github.com/bouncei" style="color:var(--dim)">bouncei</a> · Apache-2.0</div>
+      <div class="lks">
+        <a href="https://github.com/bouncei/mcpgate">GitHub</a>
+        <a href="https://github.com/bouncei/mcpgate#readme">Docs</a>
+        <a href="https://github.com/bouncei/mcpgate/releases">Releases</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
