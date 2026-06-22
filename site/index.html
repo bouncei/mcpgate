@@ -65,6 +65,8 @@
     background-image:
       radial-gradient(circle, rgba(233,222,192,0.05) 1px, transparent 1px);
     background-size: 26px 26px;
+    background-position: 0 calc(var(--sy, 0) * 0.06px);
+    will-change: background-position;
     mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 85%);
     -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 30%, transparent 85%);
   }
@@ -203,9 +205,46 @@
   @keyframes rise { to { opacity: 1; transform: none; } }
   .d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.23s}.d4{animation-delay:.32s}.d5{animation-delay:.43s}.d6{animation-delay:.55s}
   @media (prefers-reduced-motion: reduce) { .rise { animation: none; opacity: 1; transform: none; } }
+
+  /* ── scroll progress ── */
+  .progress { position: fixed; top: 0; left: 0; height: 2px; width: 0; background: var(--amber); z-index: 60; box-shadow: 0 0 12px rgba(224,162,59,.6); will-change: width; }
+
+  /* ── reveal on scroll (gated behind .js so content is visible without JS) ── */
+  .js .reveal { opacity: 0; transform: translateY(26px); transition: opacity .85s cubic-bezier(.2,.7,.2,1), transform .85s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.s1 { transition-delay: .06s; } .reveal.s2 { transition-delay: .13s; }
+  .reveal.s3 { transition-delay: .2s; }  .reveal.s4 { transition-delay: .27s; }
+
+  [data-par] { will-change: transform; }
+
+  /* ── gate log: sequenced reveal + live cursor ── */
+  .js .log .row { opacity: 0; }
+  .log.play .row { animation: logIn .5s cubic-bezier(.2,.7,.2,1) forwards; }
+  .log.play .row:nth-child(1) { animation-delay: .05s; }
+  .log.play .row:nth-child(2) { animation-delay: .16s; }
+  .log.play .row:nth-child(4) { animation-delay: .34s; }
+  .log.play .row:nth-child(5) { animation-delay: .45s; }
+  .log.play .row:nth-child(6) { animation-delay: .56s; }
+  .log.play .row:nth-child(8) { animation-delay: .74s; }
+  .log.play .row:nth-child(9) { animation-delay: .85s; }
+  .log.play .row:nth-child(10){ animation-delay: .96s; }
+  @keyframes logIn { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: none; } }
+  .cursor { display: inline-block; width: 7px; height: 1.05em; background: var(--amber); vertical-align: -2px; margin-left: 6px; opacity: 0; }
+  .log.play .cursor { opacity: 1; animation: blink 1.05s steps(1) infinite; animation-delay: 1.1s; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .log .row { opacity: 1 !important; animation: none !important; }
+    .cursor { animation: none; opacity: 1; }
+    [data-par] { transform: none !important; }
+  }
 </style>
+<script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
+
+  <div class="progress" id="progress"></div>
 
   <header class="top">
     <div class="wrap">
@@ -235,7 +274,7 @@
         </div>
 
         <div class="gate rise d5">
-          <div class="panel">
+          <div class="panel" data-par="-0.045">
             <div class="bar">
               <span class="dotrow"><span class="d"></span><span class="d"></span><span class="d"></span></span>
               client &#8594; mcpgate &#8594; mcp&nbsp;server
@@ -251,7 +290,7 @@
 <span class="gap"></span>
 <div class="row"><span class="c-dim">$</span> <span class="c-fg">curl -H "Authorization: Bearer •••" …name":"run_command"</span></div>
 <div class="row"><span class="c-dim">&#8594;</span> auth <span class="c-grn">&#10003;</span>   policy <span class="c-amb">run_command</span> <span class="c-red">&#10007; not in allowlist</span></div>
-<div class="row"><span class="c-red">&#8592; -32001</span> <span class="c-dim">tool not permitted — never reaches the server</span></div>
+<div class="row"><span class="c-red">&#8592; -32001</span> <span class="c-dim">tool not permitted — never reaches the server</span><span class="cursor"></span></div>
             </div>
           </div>
         </div>
@@ -260,37 +299,37 @@
 
     <section class="block" id="features">
       <div class="wrap">
-        <p class="kicker">What it enforces</p>
-        <h2>Four controls. Zero upstream changes.</h2>
+        <p class="kicker reveal">What it enforces</p>
+        <h2 class="reveal s1">Four controls. Zero upstream changes.</h2>
         <div class="feat">
-          <div class="item"><div class="n">01</div><div><h3>API-key <span class="tag">auth</span></h3><p>Keys are SHA-256&nbsp;hashed at rest. Every request needs one — unauthenticated calls get <code>401</code> before they ever touch your server.</p></div></div>
-          <div class="item"><div class="n">02</div><div><h3>Per-tool <span class="tag">allowlist</span></h3><p>Deny by default. Each key may call only the tools you name. Blocked tools are also hidden from <code>tools/list</code>, so clients never see them.</p></div></div>
-          <div class="item"><div class="n">03</div><div><h3>Rate <span class="tag">limiting</span></h3><p>Per-key token buckets. A noisy or runaway client gets <code>429</code>, not a melted upstream.</p></div></div>
-          <div class="item"><div class="n">04</div><div><h3>Audit <span class="tag">log</span></h3><p>One structured JSON line per request — who, which tool, the decision, status, and latency. Pipe it anywhere.</p></div></div>
+          <div class="item reveal s1"><div class="n">01</div><div><h3>API-key <span class="tag">auth</span></h3><p>Keys are SHA-256&nbsp;hashed at rest. Every request needs one — unauthenticated calls get <code>401</code> before they ever touch your server.</p></div></div>
+          <div class="item reveal s2"><div class="n">02</div><div><h3>Per-tool <span class="tag">allowlist</span></h3><p>Deny by default. Each key may call only the tools you name. Blocked tools are also hidden from <code>tools/list</code>, so clients never see them.</p></div></div>
+          <div class="item reveal s3"><div class="n">03</div><div><h3>Rate <span class="tag">limiting</span></h3><p>Per-key token buckets. A noisy or runaway client gets <code>429</code>, not a melted upstream.</p></div></div>
+          <div class="item reveal s4"><div class="n">04</div><div><h3>Audit <span class="tag">log</span></h3><p>One structured JSON line per request — who, which tool, the decision, status, and latency. Pipe it anywhere.</p></div></div>
         </div>
       </div>
     </section>
 
     <section class="block" id="how">
       <div class="wrap">
-        <p class="kicker">How it works</p>
-        <h2>One instance in front of one server.</h2>
-        <p class="lede" style="margin-top:14px">Point your MCP client at mcpgate instead of the server. Every request runs the chain, then the allowed ones are proxied through — Streamable HTTP and SSE both stream untouched.</p>
-        <div class="flow">client&nbsp; &#8594; &nbsp;<b>mcpgate</b> <span class="u">[ recover &#183; auth &#183; rate-limit &#183; policy &#183; audit ]</span>&nbsp; &#8594; &nbsp;mcp&nbsp;server</div>
+        <p class="kicker reveal">How it works</p>
+        <h2 class="reveal s1">One instance in front of one server.</h2>
+        <p class="lede reveal s2" style="margin-top:14px">Point your MCP client at mcpgate instead of the server. Every request runs the chain, then the allowed ones are proxied through — Streamable HTTP and SSE both stream untouched.</p>
+        <div class="flow reveal s3">client&nbsp; &#8594; &nbsp;<b>mcpgate</b> <span class="u">[ recover &#183; auth &#183; rate-limit &#183; policy &#183; audit ]</span>&nbsp; &#8594; &nbsp;mcp&nbsp;server</div>
       </div>
     </section>
 
     <section class="block" id="quickstart">
       <div class="wrap">
-        <p class="kicker">Quickstart</p>
-        <h2>Locked down in 30 seconds.</h2>
+        <p class="kicker reveal">Quickstart</p>
+        <h2 class="reveal s1">Locked down in 30 seconds.</h2>
         <div class="steps">
-          <div class="step">
+          <div class="step reveal s1">
             <div class="lbl">01 · key</div>
 <pre><span class="cmt"># mint a key — prints it once, plus a config snippet</span>
 mcpgate keygen --label claude-desktop</pre>
           </div>
-          <div class="step">
+          <div class="step reveal s2">
             <div class="lbl">02 · config</div>
 <pre>upstream:
   url: <span class="grn">"http://localhost:9000/mcp"</span>
@@ -299,7 +338,7 @@ keys:
     hash: <span class="grn">"&lt;paste from keygen&gt;"</span>
     allow: [<span class="acc">"read_file"</span>, <span class="acc">"list_dir"</span>]</pre>
           </div>
-          <div class="step">
+          <div class="step reveal s3">
             <div class="lbl">03 · run</div>
 <pre>docker run -p 8080:8080 \
   -v $PWD/config.yaml:/etc/mcpgate/config.yaml \
@@ -322,6 +361,61 @@ keys:
       </div>
     </div>
   </footer>
+
+  <script>
+  (function () {
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var prog = document.getElementById('progress');
+    var pars = [].slice.call(document.querySelectorAll('[data-par]'));
+    var sy = 0, ticking = false;
+
+    function update() {
+      ticking = false;
+      var doc = document.documentElement;
+      var max = (doc.scrollHeight - doc.clientHeight) || 1;
+      if (prog) prog.style.width = (sy / max * 100).toFixed(2) + '%';
+      if (reduce) return;
+      document.body.style.setProperty('--sy', sy);
+      var vh = window.innerHeight;
+      for (var i = 0; i < pars.length; i++) {
+        var el = pars[i];
+        var r = el.getBoundingClientRect();
+        var speed = parseFloat(el.getAttribute('data-par')) || 0;
+        var off = r.top + r.height / 2 - vh / 2;
+        el.style.transform = 'translate3d(0,' + (off * speed).toFixed(1) + 'px,0)';
+      }
+    }
+    function onScroll() {
+      sy = window.scrollY || document.documentElement.scrollTop;
+      if (!ticking) { requestAnimationFrame(update); ticking = true; }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.16, rootMargin: '0px 0px -8% 0px' });
+      [].forEach.call(document.querySelectorAll('.reveal'), function (el) { io.observe(el); });
+
+      var logEl = document.querySelector('.log');
+      if (logEl) {
+        var lo = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add('play'); lo.unobserve(e.target); }
+          });
+        }, { threshold: 0.3 });
+        lo.observe(logEl);
+      }
+    } else {
+      [].forEach.call(document.querySelectorAll('.reveal'), function (el) { el.classList.add('in'); });
+      var l = document.querySelector('.log'); if (l) l.classList.add('play');
+    }
+  })();
+  </script>
 
 </body>
 </html>
