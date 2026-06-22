@@ -99,6 +99,43 @@ func TestFilterToolsList(t *testing.T) {
 	}
 }
 
+func TestFilterToolsListSSE(t *testing.T) {
+	body := []byte("event: message\nid: abc\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[{\"name\":\"read_file\"},{\"name\":\"run_command\"}]}}\n\n")
+	out, err := FilterToolsListSSE(body, func(name string) bool { return name == "read_file" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "read_file") {
+		t.Error("read_file should remain")
+	}
+	if strings.Contains(s, "run_command") {
+		t.Errorf("run_command should be filtered from SSE: %s", s)
+	}
+	if !strings.Contains(s, "event: message") || !strings.Contains(s, "id: abc") {
+		t.Errorf("SSE framing not preserved: %s", s)
+	}
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			var m map[string]any
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &m); err != nil {
+				t.Errorf("data payload not valid JSON: %v", err)
+			}
+		}
+	}
+}
+
+func TestFilterToolsListSSENonJSONPreserved(t *testing.T) {
+	body := []byte("event: ping\ndata: not-json\n\n")
+	out, err := FilterToolsListSSE(body, func(string) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != string(body) {
+		t.Errorf("non-JSON SSE data should be preserved verbatim:\ngot:  %q\nwant: %q", out, body)
+	}
+}
+
 func TestFilterToolsListErrorPassthrough(t *testing.T) {
 	body := []byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"x"}}`)
 	out, err := FilterToolsList(body, func(string) bool { return true })

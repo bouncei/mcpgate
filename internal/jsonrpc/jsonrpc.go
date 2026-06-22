@@ -125,3 +125,43 @@ func FilterToolsList(body []byte, allowed func(name string) bool) ([]byte, error
 	root["result"] = resultRaw
 	return json.Marshal(root)
 }
+
+// FilterToolsListSSE applies FilterToolsList to every `data:` payload in a
+// Server-Sent Events stream (the form an MCP server may return tools/list in).
+// Non-JSON data lines and all other SSE fields (event:, id:, comments, blank
+// lines) are preserved verbatim, so event framing and resumability survive.
+func FilterToolsListSSE(body []byte, allowed func(name string) bool) ([]byte, error) {
+	var out bytes.Buffer
+	lines := bytes.Split(body, []byte("\n"))
+	for i, raw := range lines {
+		line := raw
+		hasCR := len(line) > 0 && line[len(line)-1] == '\r'
+		if hasCR {
+			line = line[:len(line)-1]
+		}
+		if bytes.HasPrefix(line, []byte("data:")) {
+			payload := bytes.TrimSpace(line[len("data:"):])
+			if len(payload) > 0 {
+				// FilterToolsList returns the payload unchanged when it has no
+				// result.tools, and errors only on malformed JSON — in which
+				// case this isn't a tool list, so keep the line verbatim.
+				if filtered, err := FilterToolsList(payload, allowed); err == nil {
+					out.WriteString("data: ")
+					out.Write(filtered)
+					if hasCR {
+						out.WriteByte('\r')
+					}
+					if i < len(lines)-1 {
+						out.WriteByte('\n')
+					}
+					continue
+				}
+			}
+		}
+		out.Write(raw)
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+	return out.Bytes(), nil
+}

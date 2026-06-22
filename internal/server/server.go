@@ -47,33 +47,42 @@ func New(cfg *config.Config) (*Server, error) {
 		audit:   aud,
 		proxy:   rp,
 	}
-	// Filter tools/list responses to the caller's allowlist.
+	// Filter tools/list responses to the caller's allowlist. The upstream may
+	// answer either as application/json or as an SSE stream (text/event-stream)
+	// — the MCP spec lets the server choose — so handle both. A tools/list
+	// response is a single message the server closes after sending, so reading
+	// it fully here does not block long-lived streaming.
 	rp.ModifyResponse = func(resp *http.Response) error {
 		allow, ok := resp.Request.Context().Value(filterKey{}).([]string)
 		if !ok {
 			return nil // not a tools/list request
-		}
-		if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
-			// We forced Accept: application/json upstream for tools/list. A
-			// non-JSON response (e.g. SSE) cannot be filtered, so fail closed:
-			// refuse it via the proxy ErrorHandler (502) rather than stream the
-			// unfiltered tool list and leak tools the caller may not use.
-			return fmt.Errorf("tools/list response is not filterable (content-type %q)", resp.Header.Get("Content-Type"))
 		}
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if err != nil {
 			return err
 		}
-		filtered, err := jsonrpc.FilterToolsList(body, func(name string) bool {
-			return policy.Allowed(allow, name)
-		})
+		allowFn := func(name string) bool { return policy.Allowed(allow, name) }
+		ct := resp.Header.Get("Content-Type")
+		var filtered []byte
+		switch {
+		case strings.HasPrefix(ct, "application/json"):
+			filtered, err = jsonrpc.FilterToolsList(body, allowFn)
+		case strings.HasPrefix(ct, "text/event-stream"):
+			filtered, err = jsonrpc.FilterToolsListSSE(body, allowFn)
+		default:
+			// Unknown content type — we cannot guarantee the tool list is
+			// filtered, so fail closed (502 via ErrorHandler) rather than risk
+			// leaking tools the caller may not use.
+			return fmt.Errorf("tools/list response not filterable (content-type %q)", ct)
+		}
 		if err != nil {
-			filtered = body // unparseable: pass through rather than break the client
+			return fmt.Errorf("tools/list filtering failed: %w", err) // fail closed
 		}
 		resp.Body = io.NopCloser(bytes.NewReader(filtered))
 		resp.ContentLength = int64(len(filtered))
 		resp.Header.Set("Content-Length", strconv.Itoa(len(filtered)))
+		resp.Header.Del("Transfer-Encoding")
 		return nil
 	}
 	return s, nil
@@ -151,8 +160,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.proxyAndAudit(w, r, audit.Event{Label: id.Label, Method: "tools/call", Tool: tool, Decision: "allow"}, start)
 
 	case "tools/list":
-		// Force a single JSON response from upstream so we can filter it.
-		r.Header.Set("Accept", "application/json")
+		// Don't override Accept: the MCP spec requires clients to advertise both
+		// application/json and text/event-stream, and compliant servers reject a
+		// request that drops text/event-stream. ModifyResponse filters whichever
+		// form the server returns.
 		ctx := context.WithValue(r.Context(), filterKey{}, id.Allow)
 		s.proxyAndAudit(w, r.WithContext(ctx), audit.Event{Label: id.Label, Method: "tools/list", Decision: "allow"}, start)
 
