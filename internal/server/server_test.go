@@ -31,9 +31,14 @@ func stubUpstream(t *testing.T) *httptest.Server {
 
 func newTestServer(t *testing.T, upstreamURL string) http.Handler {
 	t.Helper()
+	return newTestServerWithHeaders(t, upstreamURL, nil)
+}
+
+func newTestServerWithHeaders(t *testing.T, upstreamURL string, headers map[string]string) http.Handler {
+	t.Helper()
 	rl := config.RateLimit{RPS: 100, Burst: 100}
 	cfg := &config.Config{
-		Upstream: config.Upstream{URL: upstreamURL, Timeout: config.Duration(5_000_000_000)},
+		Upstream: config.Upstream{URL: upstreamURL, Timeout: config.Duration(5_000_000_000), Headers: headers},
 		Audit:    config.Audit{Output: "stdout"},
 		Keys: []config.Key{
 			{Label: "limited", Hash: auth.HashKey("k-limited"), Allow: []string{"read_file"}, RateLimit: &rl},

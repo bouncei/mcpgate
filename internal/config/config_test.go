@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -84,5 +86,82 @@ keys:
 	}
 	if cfg.Audit.Output != "stdout" {
 		t.Errorf("default audit output = %q", cfg.Audit.Output)
+	}
+}
+
+func TestUpstreamHeaders(t *testing.T) {
+	t.Setenv("MCPGATE_TEST_UPSTREAM_TOKEN", "s3cret")
+	t.Setenv("MCPGATE_TEST_EMPTY", "")
+	cases := []struct {
+		name    string
+		headers string // YAML under upstream.headers
+		want    map[string]string
+		wantErr string
+	}{
+		{
+			name:    "literal value",
+			headers: `{ X-Api-Key: "plain" }`,
+			want:    map[string]string{"X-Api-Key": "plain"},
+		},
+		{
+			name:    "env var expanded",
+			headers: `{ Authorization: "Bearer ${MCPGATE_TEST_UPSTREAM_TOKEN}" }`,
+			want:    map[string]string{"Authorization": "Bearer s3cret"},
+		},
+		{
+			name:    "bare dollar left alone",
+			headers: `{ X-Price: "$5 and $HOME" }`,
+			want:    map[string]string{"X-Price": "$5 and $HOME"},
+		},
+		{
+			name:    "unset env var",
+			headers: `{ Authorization: "Bearer ${MCPGATE_TEST_DOES_NOT_EXIST}" }`,
+			wantErr: "MCPGATE_TEST_DOES_NOT_EXIST",
+		},
+		{
+			name:    "empty env var",
+			headers: `{ Authorization: "${MCPGATE_TEST_EMPTY}" }`,
+			wantErr: "empty",
+		},
+		{
+			name:    "invalid header name",
+			headers: `{ "Bad Header": "x" }`,
+			wantErr: "invalid header name",
+		},
+		{
+			name:    "host cannot be set",
+			headers: `{ Host: "evil" }`,
+			wantErr: "Host",
+		},
+		{
+			name:    "newline in value",
+			headers: `{ X-Api-Key: "a\r\nX-Injected: b" }`,
+			wantErr: "invalid characters",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := writeTemp(t, `
+upstream:
+  url: "http://x/mcp"
+  headers: `+tc.headers+`
+keys:
+  - label: "a"
+    hash: "abc"
+`)
+			cfg, err := Load(p)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(cfg.Upstream.Headers, tc.want) {
+				t.Errorf("headers = %v, want %v", cfg.Upstream.Headers, tc.want)
+			}
+		})
 	}
 }

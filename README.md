@@ -106,10 +106,18 @@ tools outside the allowlist are rejected before they reach your server.
 
 A single `config.yaml`, reviewable in a PR, with secrets hashed at rest. See [`examples/config.yaml`](examples/config.yaml).
 
+```yaml
+upstream:
+  url: "http://localhost:9000/mcp"
+  headers:                                    # optional; sent to the upstream only
+    Authorization: "Bearer ${UPSTREAM_TOKEN}" # expanded from the environment
+```
+
 | Key | Description |
 |-----|-------------|
 | `upstream.url` | The MCP endpoint mcpgate forwards to. **Required.** |
 | `upstream.timeout` | Upstream response timeout (e.g. `30s`). |
+| `upstream.headers` | Optional map of headers set on every upstream request, e.g. the upstream's own `Authorization`. Values expand `${VAR}` from the environment, so secrets stay out of the file; an unset variable fails startup. |
 | `listen` | Address mcpgate listens on. Default `:8080`. |
 | `keys[].label` | Human-readable name for the key (appears in the audit log). |
 | `keys[].hash` | SHA-256 hex of the API key, from `mcpgate keygen`. |
@@ -133,6 +141,7 @@ A single `config.yaml`, reviewable in a PR, with secrets hashed at rest. See [`e
 - **No leakage.** Disallowed tools are removed from `tools/list` — in JSON *and* SSE responses — so clients can't discover them.
 - **Fail closed.** If a `tools/list` response can't be filtered, mcpgate refuses it rather than risk leaking the full tool list.
 - **Hashed keys.** Plaintext keys are never stored or logged; only SHA-256 hashes live in config.
+- **Keys stay at the gate.** The client's `Authorization` header is stripped before proxying, so the upstream never sees mcpgate keys. Give the upstream its own credential with `upstream.headers`.
 - **Bounded input.** Request bodies are size-limited; every request emits exactly one audit event.
 
 Found a security issue? Please open a private advisory rather than a public issue.

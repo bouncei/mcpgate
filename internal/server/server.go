@@ -33,7 +33,7 @@ type Server struct {
 }
 
 func New(cfg *config.Config) (*Server, error) {
-	rp, err := proxy.New(cfg.Upstream.URL, cfg.Upstream.Timeout.Std())
+	rp, err := proxy.New(cfg.Upstream.URL, cfg.Upstream.Timeout.Std(), cfg.Upstream.Headers)
 	if err != nil {
 		return nil, err
 	}
