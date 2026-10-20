@@ -29,15 +29,21 @@ func New(upstreamURL string, timeout time.Duration, headers map[string]string) (
 	}
 
 	rp := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			req.URL.Scheme = target.Scheme
-			req.URL.Host = target.Host
-			req.URL.Path = target.Path
-			req.URL.RawQuery = target.RawQuery
-			req.Host = target.Host
-			req.Header.Del("Authorization")
+		// Rewrite (not Director) runs after hop-by-hop headers are removed, so
+		// a client can't strip the configured headers by naming them in its
+		// Connection header.
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			out := pr.Out
+			out.URL.Scheme = target.Scheme
+			out.URL.Host = target.Host
+			out.URL.Path = target.Path
+			out.URL.RawPath = target.RawPath
+			out.URL.RawQuery = target.RawQuery
+			out.Host = target.Host
+			pr.SetXForwarded()
+			out.Header.Del("Authorization")
 			for k, v := range upstreamHeaders {
-				req.Header[k] = v
+				out.Header[k] = v
 			}
 		},
 		FlushInterval: -1, // flush immediately for SSE streaming

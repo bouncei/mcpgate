@@ -54,6 +54,7 @@ func TestProxyUpstreamHeaders(t *testing.T) {
 	cases := []struct {
 		name    string
 		headers map[string]string
+		conn    string      // client-sent Connection header, if any
 		want    http.Header // headers the upstream must see (exact values)
 		absent  []string    // headers the upstream must not see
 	}{
@@ -77,6 +78,14 @@ func TestProxyUpstreamHeaders(t *testing.T) {
 			headers: map[string]string{"X-Tenant": "configured"},
 			want:    http.Header{"X-Tenant": {"configured"}},
 		},
+		{
+			// Hop-by-hop stripping of Connection-named headers must not let a
+			// client remove a configured header.
+			name:    "client cannot strip configured headers via Connection",
+			headers: map[string]string{"Authorization": "Bearer upstream-secret", "X-Api-Key": "upstream-key"},
+			conn:    "Authorization, X-Api-Key",
+			want:    http.Header{"Authorization": {"Bearer upstream-secret"}, "X-Api-Key": {"upstream-key"}},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,6 +102,9 @@ func TestProxyUpstreamHeaders(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "http://gateway/mcp", nil)
 			req.Header.Set("Authorization", clientAuth)
 			req.Header.Set("X-Tenant", "client")
+			if tc.conn != "" {
+				req.Header.Set("Connection", tc.conn)
+			}
 			rec := httptest.NewRecorder()
 			p.ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK {
