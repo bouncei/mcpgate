@@ -3,8 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/textproto"
 	"net/url"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -34,8 +37,9 @@ type RateLimit struct {
 }
 
 type Upstream struct {
-	URL     string   `yaml:"url"`
-	Timeout Duration `yaml:"timeout"`
+	URL     string            `yaml:"url"`
+	Timeout Duration          `yaml:"timeout"`
+	Headers map[string]string `yaml:"headers"`
 }
 
 type Key struct {
@@ -70,6 +74,9 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	if err := c.expandEnv(); err != nil {
+		return nil, err
+	}
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -84,6 +91,11 @@ func (c *Config) Validate() error {
 	if _, err := url.Parse(c.Upstream.URL); err != nil {
 		return fmt.Errorf("upstream.url invalid: %w", err)
 	}
+	for name, value := range c.Upstream.Headers {
+		if err := validateHeader(name, value); err != nil {
+			return fmt.Errorf("upstream.headers: %w", err)
+		}
+	}
 	if len(c.Keys) == 0 {
 		return errors.New("at least one key is required")
 	}
@@ -96,6 +108,65 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// envRef matches ${VAR}. Only the braced form is expanded, so a literal "$"
+// in a header value is left alone.
+var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// expandEnv replaces ${VAR} in upstream.headers values with the environment
+// variable's value, so secrets can stay out of config.yaml. An unset variable
+// is an error rather than an empty credential.
+func (c *Config) expandEnv() error {
+	for name, value := range c.Upstream.Headers {
+		var missing []string
+		expanded := envRef.ReplaceAllStringFunc(value, func(ref string) string {
+			v, ok := os.LookupEnv(envRef.FindStringSubmatch(ref)[1])
+			if !ok {
+				missing = append(missing, ref)
+			}
+			return v
+		})
+		if len(missing) > 0 {
+			return fmt.Errorf("upstream.headers.%s: environment variable %s is not set", name, strings.Join(missing, ", "))
+		}
+		c.Upstream.Headers[name] = expanded
+	}
+	return nil
+}
+
+// reservedHeaders are managed by mcpgate or Go's HTTP client; setting them
+// would be ignored or break request framing.
+var reservedHeaders = map[string]bool{
+	"Host":              true,
+	"Content-Length":    true,
+	"Transfer-Encoding": true,
+	"Connection":        true,
+}
+
+func validateHeader(name, value string) error {
+	if name == "" || strings.IndexFunc(name, func(r rune) bool { return !isTokenChar(r) }) >= 0 {
+		return fmt.Errorf("invalid header name %q", name)
+	}
+	if reservedHeaders[textproto.CanonicalMIMEHeaderKey(name)] {
+		return fmt.Errorf("%s cannot be set", textproto.CanonicalMIMEHeaderKey(name))
+	}
+	if value == "" {
+		return fmt.Errorf("%s: value is empty", name)
+	}
+	if strings.IndexFunc(value, func(r rune) bool { return (r < ' ' && r != '\t') || r == 0x7f }) >= 0 {
+		return fmt.Errorf("%s: value contains invalid characters", name)
+	}
+	return nil
+}
+
+// isTokenChar reports whether r may appear in an HTTP header name (RFC 9110 token).
+func isTokenChar(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	}
+	return strings.ContainsRune("!#$%&'*+-.^_`|~", r)
 }
 
 func (c *Config) applyDefaults() {
