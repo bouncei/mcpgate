@@ -12,11 +12,30 @@ text/event-stream responses. Standard library only.
 """
 import argparse
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
 
 PROTOCOL_VERSION = "2025-06-18"
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: urllib would otherwise replay our headers, including
+    any -H Authorization credential, to whatever host the server names."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _clean(s):
+    """Strip control characters from server-supplied text before printing it,
+    so a hostile server can't inject terminal escape sequences."""
+    return _CONTROL.sub("", str(s))
 
 
 class Client:
@@ -40,9 +59,13 @@ class Client:
             self.url, data=json.dumps(payload).encode(), headers=headers, method="POST"
         )
         try:
-            resp = urllib.request.urlopen(req, timeout=self.timeout)
+            resp = _OPENER.open(req, timeout=self.timeout)
         except urllib.error.HTTPError as e:
-            body = e.read().decode(errors="replace").strip()
+            if 300 <= e.code < 400:
+                raise SystemExit(f"HTTP {e.code} redirect from {self.url} to "
+                                 f"{_clean(e.headers.get('Location', '?'))}; redirects are not "
+                                 "followed (they could leak -H credentials), pass the final URL")
+            body = _clean(e.read().decode(errors="replace").strip())
             raise SystemExit(f"HTTP {e.code} from {self.url}: {body[:300]}")
         except urllib.error.URLError as e:
             raise SystemExit(f"cannot reach {self.url}: {e.reason}")
@@ -69,9 +92,9 @@ class Client:
             if m.get("id") == rid:
                 if "error" in m:
                     err = m["error"]
-                    raise SystemExit(f"{method} failed: {err.get('code')} {err.get('message')}")
+                    raise SystemExit(f"{method} failed: {err.get('code')} {_clean(err.get('message'))}")
                 return m.get("result", {})
-        raise SystemExit(f"no response to {method} (content-type {ctype!r}): {raw[:300]}")
+        raise SystemExit(f"no response to {method} (content-type {ctype!r}): {_clean(raw[:300])}")
 
 
 def _messages(ctype, raw):
@@ -129,7 +152,7 @@ def main():
         return
 
     server = init.get("serverInfo", {})
-    print(f"Server: {server.get('name', '?')} {server.get('version', '')}".rstrip())
+    print(f"Server: {_clean(server.get('name', '?'))} {_clean(server.get('version', ''))}".rstrip())
     print(f"Tools ({len(tools)}):")
     read_only, other = [], []
     for t in tools:
@@ -139,11 +162,11 @@ def main():
             flags.append("read-only")
         if ann.get("destructiveHint"):
             flags.append("destructive")
-        desc = " ".join((t.get("description") or "").split())
+        desc = " ".join(_clean(t.get("description") or "").split())
         if len(desc) > 90:
             desc = desc[:87] + "..."
         tag = f" [{', '.join(flags)}]" if flags else ""
-        print(f"  {t['name']}{tag}  {desc}")
+        print(f"  {_clean(t['name'])}{tag}  {desc}")
         (read_only if ann.get("readOnlyHint") else other).append(t["name"])
 
     print("\nSuggested allow lists (exact names; adjust to the client's needs):")
