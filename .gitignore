@@ -4,3 +4,7 @@
 *.out
 .DS_Store
 config.yaml
+
+# agent skill dev
+skills/*-workspace/
+dist/

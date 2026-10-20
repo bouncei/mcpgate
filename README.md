@@ -52,6 +52,14 @@ Point your MCP client at mcpgate instead of the server directly. Every request r
 
 ## Install
 
+Prebuilt binaries for Linux, macOS and Windows (amd64/arm64) are on the [releases page](https://github.com/bouncei/mcpgate/releases). To download the right one and verify its checksum:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bouncei/mcpgate/main/skills/mcpgate/scripts/install.sh | bash
+```
+
+Or with Go:
+
 ```bash
 # Go 1.25+
 go install github.com/bouncei/mcpgate/cmd/mcpgate@latest
@@ -71,8 +79,6 @@ Or with Docker:
 docker build -t mcpgate .
 docker run -p 8080:8080 -v "$PWD/config.yaml:/etc/mcpgate/config.yaml" mcpgate
 ```
-
-> Prebuilt cross-platform binaries and a published container image ship with the first tagged release.
 
 ## Quickstart
 
@@ -101,6 +107,17 @@ mcpgate serve -c config.yaml
 Now point your MCP client at `http://localhost:8080/mcp` and send the key as an
 `Authorization: Bearer <key>` header. Requests without a valid key get `401`; calls to
 tools outside the allowlist are rejected before they reach your server.
+
+## Use it from your coding agent
+
+[`skills/mcpgate`](skills/mcpgate) is an agent skill (the `SKILL.md` format) that teaches Claude Code, Cursor, Codex and other agents to:
+- set mcpgate up in front of an MCP server, using the upstream's real tool names to build least-privilege allowlists;
+- connect clients through it;
+- rotate leaked keys;
+- debug `tool not permitted` / 401 / 429 errors;
+- summarize the audit log.
+
+To install it for Claude Code, copy the folder into `~/.claude/skills/`. Then just ask, e.g. *"put auth in front of my MCP server at localhost:9000"*.
 
 ## Configuration
 

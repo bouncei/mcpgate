@@ -1,0 +1,72 @@
+{
+  "skill_name": "mcpgate",
+  "evals": [
+    {
+      "id": 1,
+      "name": "setup-readonly-and-ci",
+      "prompt": "I've got the filesystem MCP server running in streamable HTTP mode at http://127.0.0.1:19500/mcp on my box. I want to put mcpgate in front of it. My Claude Code should only be able to read stuff, never write/move/delete. Our CI bot should get every tool. Give me the config.yaml, the commands to run, and how to hook Claude Code up to it.",
+      "expected_output": "config.yaml with exact upstream tool names (read_text_file etc., not guessed), a read-only key for Claude Code, '*' for ci-bot, keygen per client, plaintext keys kept out of config, Claude Code connected with a Bearer header via env var, burst raised for the interactive client, and a smoke test.",
+      "files": [],
+      "assertions": [
+        "config.yaml uses the upstream's real tool names (e.g. read_text_file, list_directory_with_sizes) rather than guessed names like read_file",
+        "Claude Code key's allow list contains no write/move/create/edit tools (write_file, edit_file, move_file, create_directory)",
+        "Claude Code key's allow list covers the read-only tools (at least read_text_file, list_directory, search_files)",
+        "ci-bot key has allow: [\"*\"]",
+        "Separate keys with distinct labels for Claude Code and ci-bot, hashes from mcpgate keygen (not plaintext keys) in config.yaml",
+        "Claude Code connection uses --transport http (or type http) with an 'Authorization: Bearer' header",
+        "Raises rate-limit burst for the Claude Code key or warns that the default burst can 429 on connect",
+        "Includes a verification step showing a disallowed tool is denied (or tools/list is filtered)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "rotate-leaked-key-and-audit",
+      "prompt": "ugh, bob pasted his mcpgate key into a public slack channel. config is at fixtures/leaked/config.yaml and the audit log is fixtures/leaked/audit.jsonl (it's a copy of /var/log/mcpgate/audit.jsonl). kill his key, give him a new one, and tell me what his key was used for over the last week (today is 2026-10-20). anything sketchy?",
+      "expected_output": "bob-cursor hash replaced with a fresh keygen hash (old one gone), restart called out as required for revocation, new plaintext key handed over but not written into config, a 7-day summary of bob-cursor's activity, and the off-hours deny:policy attempts on move_file/create_directory/read_multiple_files plus the 429 bursts flagged as suspicious.",
+      "files": [
+        "fixtures/leaked/config.yaml",
+        "fixtures/leaked/audit.jsonl"
+      ],
+      "assertions": [
+        "bob-cursor's hash in config.yaml is replaced with a new 64-hex hash and the old hash no longer appears",
+        "Other keys (alice-claude-code, ci-bot) are unchanged",
+        "States that mcpgate must be restarted for the revocation to take effect (old key works until restart)",
+        "Plaintext new key does not appear in config.yaml",
+        "Reports bob-cursor activity for the last 7 days with tool-level counts (e.g. list_directory, read_text_file, edit_file, write_file)",
+        "Flags the ~3am activity on 3 consecutive nights (Oct 17-19) as suspicious",
+        "Mentions the deny:policy attempts on move_file / create_directory / read_multiple_files",
+        "Notes that some off-hours read_text_file calls were allowed (data may have been read), not only denied"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "debug-tool-not-permitted",
+      "prompt": "Dana says Cursor keeps erroring with 'tool not permitted: write_file' when going through our mcpgate, but write is definitely in her allowlist. config: fixtures/typo/config.yaml. what's wrong and fix it",
+      "expected_output": "Spots 'write-file' (hyphen) vs the exact name 'write_file', explains allowlists are exact-match, fixes the config, and says to validate + restart serve.",
+      "files": [
+        "fixtures/typo/config.yaml"
+      ],
+      "assertions": [
+        "Identifies 'write-file' (hyphen) vs 'write_file' as the cause",
+        "Explains allowlist entries are exact-match (no fuzzy/glob)",
+        "dana-cursor allow list in config.yaml now contains \"write_file\" and no longer contains \"write-file\"",
+        "Rest of config.yaml unchanged (ci-bot still \"*\", other tools intact)",
+        "Says to restart mcpgate serve (no hot reload) after the fix"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "stdio-upstream",
+      "prompt": "can I use mcpgate to lock down my postgres MCP server? I run it from claude desktop config as `npx -y @modelcontextprotocol/server-postgres postgresql://localhost/app`. want my teammates to only be able to run read queries through it",
+      "expected_output": "Recognizes this is a stdio server, which mcpgate can't front directly; proposes running it behind a stdio-to-HTTP bridge and pointing mcpgate at that; notes the allowlist is per tool, not per query, so 'read-only queries' can't be enforced by mcpgate if the server exposes one generic query tool; doesn't invent mcpgate stdio flags.",
+      "files": [],
+      "assertions": [
+        "States mcpgate cannot front a stdio server directly (HTTP/SSE upstream only)",
+        "Proposes running the server behind a stdio-to-HTTP bridge and pointing mcpgate's upstream.url at it",
+        "Does not invent mcpgate stdio flags/config fields that don't exist",
+        "Addresses read-only: mcpgate gates per tool name, not per SQL statement, so read-only must come from the server/DB (e.g. server-postgres read-only transactions or a read-only DB role)",
+        "Gives a client connection snippet with an Authorization: Bearer header"
+      ]
+    }
+  ]
+}
