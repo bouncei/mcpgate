@@ -1,0 +1,29 @@
+# Example mcpgate config. Generate real key hashes with: mcpgate keygen --label <name>
+upstream:
+  url: "http://localhost:9000/mcp"   # the MCP server mcpgate fronts
+  timeout: 30s
+  # Optional headers set on every upstream request. The client's own
+  # Authorization (its mcpgate key) is always stripped, so use this to give the
+  # upstream its own credential. ${VAR} is read from the environment; an unset
+  # variable fails startup.
+  # headers:
+  #   Authorization: "Bearer ${UPSTREAM_TOKEN}"
+
+listen: ":8080"
+
+keys:
+  - label: "claude-desktop"
+    # SHA-256 hex of the real key (from `mcpgate keygen`). Replace this placeholder.
+    hash: "REPLACE_WITH_KEYGEN_HASH"
+    allow: ["read_file", "list_dir"]   # per-tool allowlist; omit/empty = deny all
+    rate_limit: { rps: 5, burst: 10 }
+
+  - label: "ci-bot"
+    hash: "REPLACE_WITH_KEYGEN_HASH"
+    allow: ["*"]                        # wildcard = all tools
+
+defaults:
+  rate_limit: { rps: 2, burst: 5 }
+
+audit:
+  output: stdout                        # stdout (default) or a file path
