@@ -4,6 +4,7 @@
 *.out
 .DS_Store
 config.yaml
+!examples/config.yaml
 
 # agent skill dev
 skills/*-workspace/
